@@ -162,7 +162,7 @@ class DouyinProcessor:
         return filepath
 
     def extract_audio(self, video_path: Path, show_progress: bool = True) -> Path:
-        """从视频文件中提取音频"""
+        """从视频文件中提取音频（转换为 16kHz 单声道 MP3）"""
         audio_path = video_path.with_suffix('.mp3')
 
         if show_progress:
@@ -171,7 +171,7 @@ class DouyinProcessor:
             (
                 ffmpeg
                 .input(str(video_path))
-                .output(str(audio_path), acodec='libmp3lame', q=0)
+                .output(str(audio_path), acodec='libmp3lame', ar=16000, ac=1, q=3)
                 .run(capture_stdout=True, capture_stderr=True, overwrite_output=True)
             )
             if show_progress:
@@ -223,7 +223,7 @@ class DouyinProcessor:
                 (
                     ffmpeg
                     .input(str(audio_path), ss=current_time, t=segment_duration)
-                    .output(str(segment_path), acodec='libmp3lame', q=0)
+                    .output(str(segment_path), acodec='libmp3lame', ar=16000, ac=1, q=3)
                     .run(capture_stdout=True, capture_stderr=True, overwrite_output=True)
                 )
                 segments.append(segment_path)
@@ -241,29 +241,39 @@ class DouyinProcessor:
 
     def transcribe_single_audio(self, audio_path: Path) -> str:
         """转录单个音频文件"""
-        files = {
-            'file': (audio_path.name, open(audio_path, 'rb'), 'audio/mpeg'),
-            'model': (None, self.model)
-        }
+        with open(audio_path, 'rb') as f:
+            files = {
+                'file': (audio_path.name, f, 'audio/mpeg'),
+                'model': (None, self.model),
+            }
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}"
-        }
+            headers = {
+                "Authorization": f"Bearer {self.api_key}"
+            }
 
-        try:
-            response = requests.post(self.api_base_url, files=files, headers=headers)
-            response.raise_for_status()
+            try:
+                response = requests.post(self.api_base_url, files=files, headers=headers, timeout=120)
 
-            result = response.json()
-            if 'text' in result:
-                return result['text']
-            else:
-                return response.text
+                if response.status_code != 200:
+                    body = response.text[:500]
+                    raise Exception(
+                        f"API 返回 {response.status_code}: {body}"
+                    )
 
-        except Exception as e:
-            raise Exception(f"提取文字时出错: {str(e)}")
-        finally:
-            files['file'][1].close()
+                result = response.json()
+                if 'text' in result:
+                    return result['text']
+                else:
+                    return response.text
+
+            except requests.exceptions.Timeout:
+                raise Exception("API 请求超时，请稍后重试")
+            except requests.exceptions.ConnectionError:
+                raise Exception("无法连接到硅基流动 API，请检查网络")
+            except Exception as e:
+                if "API 返回" in str(e):
+                    raise
+                raise Exception(f"提取文字时出错: {str(e)}")
 
     def extract_text_from_audio(self, audio_path: Path, show_progress: bool = True) -> str:
         """从音频文件中提取文字（支持大文件自动分段）"""
