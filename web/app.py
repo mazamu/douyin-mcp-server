@@ -25,6 +25,7 @@ import requests
 
 # 导入抖音处理模块
 from douyin_downloader import get_video_info, extract_text, HEADERS
+from urllib.parse import urlparse
 
 app = FastAPI(title="抖音文案提取器", version="1.0.0")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -110,25 +111,41 @@ async def extract_transcript(req: VideoRequest):
         return ExtractResponse(success=False, error=str(e))
 
 
+def _get_referer_for_url(url: str) -> str:
+    """根据视频 URL 自动判断来源平台，返回正确的 Referer"""
+    domain = urlparse(url).hostname or ""
+    if any(d in domain for d in ["douyin.com", "365yg.com", "amemv.com", "douyincdn.com",
+                                  "iesdouyin.com", "douyinvod.com"]):
+        return "https://www.douyin.com/"
+    if any(d in domain for d in ["xiaohongshu.com", "xhscdn.com"]):
+        return "https://www.xiaohongshu.com/"
+    if any(d in domain for d in ["kuaishou.com", "kwai.com", "kscdn.com"]):
+        return "https://www.kuaishou.com/"
+    if any(d in domain for d in ["weibo.com", "weibocdn.com"]):
+        return "https://www.weibo.com/"
+    # 默认使用 URL 自身域名
+    return f"https://{domain}/"
+
+
 @app.get("/api/video/download")
 async def download_video(url: str, filename: str = "video.mp4"):
     """代理下载视频（解决跨域和请求头问题）"""
     print(f"[Download] URL: {url}")
     print(f"[Download] Filename: {filename}")
     try:
-        # 完整的请求头，模拟浏览器访问
+        referer = _get_referer_for_url(url)
+
         download_headers = {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/121.0.2277.107 Version/17.0 Mobile/15E148 Safari/604.1',
-            'Referer': 'https://www.douyin.com/',
+            'User-Agent': HEADERS['User-Agent'],
+            'Referer': referer,
+            'Origin': referer.rstrip("/"),
             'Accept': '*/*',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'identity',
-            'Connection': 'keep-alive',
         }
 
-        response = requests.get(url, headers=download_headers, stream=True, allow_redirects=True)
+        response = requests.get(url, headers=download_headers, stream=True, allow_redirects=True, timeout=120)
         print(f"[Download] Response status: {response.status_code}")
-        print(f"[Download] Final URL: {response.url}")
+        print(f"[Download] Referer: {referer}")
         response.raise_for_status()
 
         content_length = response.headers.get("content-length", "")

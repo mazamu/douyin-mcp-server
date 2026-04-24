@@ -25,7 +25,6 @@
 import os
 import re
 import sys
-import json
 import argparse
 import tempfile
 import shutil
@@ -70,6 +69,10 @@ DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
 class DouyinProcessor:
     """抖音视频处理器"""
 
+    # 第三方解析 API
+    PARSE_API_URL = "https://proxy.layzz.cn/lyz/getAnalyse"
+    PARSE_API_TOKEN = "uuic-qackd-fga-test"
+
     def __init__(self, api_key: str = "", api_base_url: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key
         self.api_base_url = api_base_url or DEFAULT_API_BASE_URL
@@ -89,40 +92,30 @@ class DouyinProcessor:
             raise ValueError("未找到有效的分享链接")
 
         share_url = urls[0]
-        share_response = requests.get(share_url, headers=HEADERS)
-        video_id = share_response.url.split("?")[0].strip("/").split("/")[-1]
-        share_url = f'https://www.iesdouyin.com/share/video/{video_id}'
 
-        # 获取视频页面内容
-        response = requests.get(share_url, headers=HEADERS)
+        # 调用第三方解析 API 获取无水印视频链接
+        api_url = f"{self.PARSE_API_URL}?token={self.PARSE_API_TOKEN}&link={share_url}"
+        response = requests.get(api_url, headers=HEADERS)
         response.raise_for_status()
 
-        pattern = re.compile(
-            pattern=r"window\._ROUTER_DATA\s*=\s*(.*?)</script>",
-            flags=re.DOTALL,
-        )
-        find_res = pattern.search(response.text)
+        result = response.json()
+        if result.get("code") != "0001":
+            raise ValueError(f"解析失败: {result.get('message', '未知错误')}")
 
-        if not find_res or not find_res.group(1):
-            raise ValueError("从HTML中解析视频信息失败")
+        data = result["data"]
+        video_url = data["playAddr"]
+        desc = data.get("desc", "").strip() or "douyin_video"
 
-        # 解析JSON数据
-        json_data = json.loads(find_res.group(1).strip())
-        VIDEO_ID_PAGE_KEY = "video_(id)/page"
-        NOTE_ID_PAGE_KEY = "note_(id)/page"
-
-        if VIDEO_ID_PAGE_KEY in json_data["loaderData"]:
-            original_video_info = json_data["loaderData"][VIDEO_ID_PAGE_KEY]["videoInfoRes"]
-        elif NOTE_ID_PAGE_KEY in json_data["loaderData"]:
-            original_video_info = json_data["loaderData"][NOTE_ID_PAGE_KEY]["videoInfoRes"]
-        else:
-            raise Exception("无法从JSON中解析视频或图集信息")
-
-        data = original_video_info["item_list"][0]
-
-        # 获取视频信息
-        video_url = data["video"]["play_addr"]["url_list"][0].replace("playwm", "play")
-        desc = data.get("desc", "").strip() or f"douyin_{video_id}"
+        # 从视频 URL 中提取 video_id
+        video_id = ""
+        if share_url:
+            try:
+                share_response = requests.get(share_url, headers=HEADERS, allow_redirects=True)
+                video_id = share_response.url.split("?")[0].strip("/").split("/")[-1]
+            except Exception:
+                pass
+        if not video_id:
+            video_id = share_url.rstrip("/").split("/")[-1]
 
         # 替换文件名中的非法字符
         desc = re.sub(r'[\\/:*?"<>|]', '_', desc)
