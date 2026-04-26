@@ -110,7 +110,7 @@
             </div>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-douyin-gray-700 mb-2">API Key</label>
+                    <label class="block text-sm font-medium text-douyin-gray-700 mb-2">硅基流动 API Key</label>
                     <div class="relative">
                         <input :type="showApiKey ? 'text' : 'password'" x-model="apiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxx"
                             class="w-full px-4 py-3 pr-20 text-sm border border-douyin-gray-200 rounded-xl focus-ring transition-smooth font-mono">
@@ -124,13 +124,30 @@
                             </button>
                         </div>
                     </div>
-                    <p class="mt-2 text-xs text-douyin-gray-400">API Key 仅保存在浏览器本地，不会上传到服务器</p>
+                    <p class="mt-2 text-xs text-douyin-gray-400">用于语音转文字（硅基流动 SenseVoiceSmall）</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-douyin-gray-700 mb-2">DeepSeek API Key</label>
+                    <div class="relative">
+                        <input :type="showDeepseekApiKey ? 'text' : 'password'" x-model="deepseekApiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxx"
+                            class="w-full px-4 py-3 pr-20 text-sm border border-douyin-gray-200 rounded-xl focus-ring transition-smooth font-mono">
+                        <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                            <button @click="showDeepseekApiKey = !showDeepseekApiKey" class="w-8 h-8 rounded-lg hover:bg-douyin-gray-100 flex items-center justify-center">
+                                <svg x-show="!showDeepseekApiKey" class="w-4 h-4 text-douyin-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                <svg x-show="showDeepseekApiKey" class="w-4 h-4 text-douyin-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                            </button>
+                            <button x-show="deepseekApiKeyInput" @click="deepseekApiKeyInput = ''" class="w-8 h-8 rounded-lg hover:bg-douyin-gray-100 flex items-center justify-center">
+                                <svg class="w-4 h-4 text-douyin-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="mt-2 text-xs text-douyin-gray-400">用于文案拆分分析（DeepSeek）</p>
                 </div>
                 <div class="flex gap-3">
                     <a href="https://cloud.siliconflow.cn/i/TxUlXG3u" target="_blank" class="flex-1 h-11 border border-douyin-gray-200 hover:bg-douyin-gray-50 text-douyin-gray-700 font-medium text-sm rounded-xl transition-smooth flex items-center justify-center gap-2">获取 API Key</a>
-                    <button @click="saveApiKey" class="flex-1 h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth shadow-lg shadow-douyin-red/20">保存配置</button>
+                    <button @click="saveApiKeys" class="flex-1 h-11 bg-gradient-douyin hover:opacity-90 text-white font-medium text-sm rounded-xl transition-smooth shadow-lg shadow-douyin-red/20">保存配置</button>
                 </div>
-                <button x-show="apiKey" @click="clearApiKey" class="w-full h-10 text-sm text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-smooth">清除已保存的 API Key</button>
+                <button x-show="apiKey || deepseekApiKey" @click="clearApiKeys" class="w-full h-10 text-sm text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-smooth">清除已保存的 API Key</button>
             </div>
         </div>
     </div>
@@ -147,7 +164,8 @@
             <div class="space-y-3 text-sm text-douyin-gray-600">
                 <div class="p-3 bg-douyin-gray-50 rounded-xl"><p class="font-medium text-douyin-gray-900 mb-1">1. 配置 API Key</p><p>点击顶部状态栏输入 API Key</p></div>
                 <div class="p-3 bg-douyin-gray-50 rounded-xl"><p class="font-medium text-douyin-gray-900 mb-1">2. 粘贴分享链接</p><p>可同时处理 3 个视频（抖音、小红书等）</p></div>
-                <div class="p-3 bg-douyin-gray-50 rounded-xl"><p class="font-medium text-douyin-gray-900 mb-1">3. 点击提取</p><p>「获取信息」无需 API，「提取文案」需要 API</p></div>
+                <div class="p-3 bg-douyin-gray-50 rounded-xl"><p class="font-medium text-douyin-gray-900 mb-1">3. 点击提取</p><p>「获取信息」无需 API，「提取文案」需要硅基流动 API</p></div>
+                <div class="p-3 bg-douyin-gray-50 rounded-xl"><p class="font-medium text-douyin-gray-900 mb-1">4. 拆分分析</p><p>提取文案后，点击下方按钮用 DeepSeek 拆分分析文案结构</p></div>
             </div>
         </div>
     </div>
@@ -317,6 +335,80 @@
             </template>
 
         </div>
+
+        <!-- 拆分分析区域 -->
+        <div class="mt-10">
+            <div class="flex flex-col items-center gap-4">
+                <button @click="analyzeTranscripts()"
+                        :disabled="analyzing || !hasAnyTranscript"
+                        class="px-8 py-3.5 bg-white border-2 border-douyin-gray-200 hover:border-douyin-red/30 hover:bg-douyin-red/5 text-douyin-gray-700 hover:text-douyin-red font-semibold text-sm rounded-2xl transition-smooth disabled:opacity-50 disabled:cursor-not-allowed shadow-card hover:shadow-card-hover flex items-center gap-2.5"
+                        x-show="hasAnyTranscript">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    拆分分析文案
+                </button>
+                <p x-show="!hasAnyTranscript" class="text-sm text-douyin-gray-400">请先提取至少一个文案，再使用拆分分析功能</p>
+            </div>
+
+            <!-- 分析加载态 -->
+            <div x-show="analyzing" x-transition class="mt-6 max-w-3xl mx-auto">
+                <div class="bg-white rounded-2xl shadow-card p-8 flex flex-col items-center">
+                    <div class="relative w-14 h-14 mb-5">
+                        <div class="absolute inset-0 rounded-full border-4 border-douyin-gray-100"></div>
+                        <div class="absolute inset-0 rounded-full border-4 border-douyin-red border-t-transparent animate-spin-slow"></div>
+                    </div>
+                    <p class="font-semibold text-sm text-douyin-gray-900">文案正在拆分加载中...</p>
+                    <p class="text-xs text-douyin-gray-400 mt-1">DeepSeek 正在分析文案结构，请稍候</p>
+                </div>
+            </div>
+
+            <!-- 分析错误 -->
+            <div x-show="analysisError" x-transition class="mt-6 max-w-3xl mx-auto">
+                <div class="bg-red-50 border border-red-100 rounded-2xl p-4">
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-medium text-sm text-red-800">分析失败</h4>
+                            <p class="text-xs text-red-600 mt-1" x-text="analysisError"></p>
+                        </div>
+                        <button @click="analysisError = ''" class="w-7 h-7 rounded-lg hover:bg-red-100 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分析结果表格 -->
+            <div x-show="analysisResult" x-transition class="mt-6 bg-white rounded-2xl shadow-card overflow-hidden">
+                <div class="px-5 py-3 border-b border-douyin-gray-100 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 bg-gradient-douyin rounded-lg flex items-center justify-center">
+                            <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        </div>
+                        <span class="font-semibold text-sm text-douyin-gray-900">文案拆分分析结果</span>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="bg-douyin-gray-50" x-html="analysisHeaderHtml"></tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="(row, ri) in analysisRows" :key="ri">
+                                <tr :class="ri % 2 === 0 ? 'bg-white' : 'bg-douyin-gray-50/50'">
+                                    <template x-for="cell in row.cells" :key="cell.key">
+                                        <td class="px-3 py-2 border-t border-douyin-gray-100 leading-relaxed max-w-60"
+                                            :class="cell.mono ? 'text-douyin-gray-500 font-mono' : cell.bold ? 'font-medium text-douyin-gray-800' : 'text-douyin-gray-700'"
+                                            x-text="cell.value"></td>
+                                    </template>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Toast -->
@@ -332,9 +424,9 @@
     <!-- Footer -->
     <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex items-center justify-between text-sm text-douyin-gray-400">
-            <p>Made with <span class="text-douyin-red">♥</span> by yzfly</p>
+            <p>Made with <span class="text-douyin-red">♥</span> by mazamu</p>
             <div class="flex items-center gap-4">
-                <a href="https://github.com/yzfly/douyin-mcp-server" target="_blank" class="hover:text-douyin-red transition-colors flex items-center gap-1">
+                <a href="https://github.com/mazamu/douyin-mcp-server" target="_blank" class="hover:text-douyin-red transition-colors flex items-center gap-1">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
                     GitHub
                 </a>
@@ -366,12 +458,33 @@
                 showHelp: false,
                 showSettings: false,
                 showApiKey: false,
+                showDeepseekApiKey: false,
                 apiKey: '',
                 apiKeyInput: '',
+                deepseekApiKey: '',
+                deepseekApiKeyInput: '',
                 serverApiKeyConfigured: false,
+                serverDeepseekKeyConfigured: false,
+
+                // 拆分分析状态
+                analyzing: false,
+                analysisResult: null,
+                analysisError: '',
+                analysisLabels: [],
+                analysisRows: [],
+                analysisHeaderCells: [],
+                analysisHeaderHtml: '',
 
                 get apiKeyConfigured() {
                     return this.serverApiKeyConfigured || !!this.apiKey;
+                },
+
+                get deepseekKeyConfigured() {
+                    return this.serverDeepseekKeyConfigured || !!this.deepseekApiKey;
+                },
+
+                get hasAnyTranscript() {
+                    return this.cards.some(c => !!c.transcript);
                 },
 
                 async checkHealth() {
@@ -380,19 +493,31 @@
                         this.apiKey = savedKey;
                         this.apiKeyInput = savedKey;
                     }
+                    const savedDeepseekKey = localStorage.getItem('douyin_deepseek_api_key');
+                    if (savedDeepseekKey) {
+                        this.deepseekApiKey = savedDeepseekKey;
+                        this.deepseekApiKeyInput = savedDeepseekKey;
+                    }
                     try {
                         const res = await fetch('/api/health');
                         const data = await res.json();
                         this.serverApiKeyConfigured = data.api_key_configured;
+                        this.serverDeepseekKeyConfigured = data.deepseek_key_configured;
                     } catch (e) {
                         console.error('Health check failed:', e);
                     }
                 },
 
-                saveApiKey() {
+                saveApiKeys() {
                     if (this.apiKeyInput) {
                         this.apiKey = this.apiKeyInput;
                         localStorage.setItem('douyin_api_key', this.apiKeyInput);
+                    }
+                    if (this.deepseekApiKeyInput) {
+                        this.deepseekApiKey = this.deepseekApiKeyInput;
+                        localStorage.setItem('douyin_deepseek_api_key', this.deepseekApiKeyInput);
+                    }
+                    if (this.apiKeyInput || this.deepseekApiKeyInput) {
                         this.showSettings = false;
                         this.showToast('API Key 已保存');
                     } else {
@@ -400,10 +525,13 @@
                     }
                 },
 
-                clearApiKey() {
+                clearApiKeys() {
                     this.apiKey = '';
                     this.apiKeyInput = '';
+                    this.deepseekApiKey = '';
+                    this.deepseekApiKeyInput = '';
                     localStorage.removeItem('douyin_api_key');
+                    localStorage.removeItem('douyin_deepseek_api_key');
                     this.showToast('API Key 已清除');
                 },
 
@@ -472,6 +600,126 @@
                     a.download = (card.videoInfo?.video_id || 'transcript') + '.md';
                     document.body.appendChild(a); a.click(); document.body.removeChild(a);
                     this.showToast('文案已下载');
+                },
+
+                async analyzeTranscripts() {
+                    if (!this.deepseekKeyConfigured) {
+                        this.showSettings = true;
+                        this.showToast('请先配置 DeepSeek API Key');
+                        return;
+                    }
+                    const transcripts = [];
+                    this.cards.forEach((card, i) => {
+                        if (card.transcript) {
+                            const label = card.videoInfo?.title || '文案' + (i + 1);
+                            transcripts.push({ label: label, text: card.transcript });
+                        }
+                    });
+                    if (transcripts.length === 0) {
+                        this.showToast('请先提取至少一个文案');
+                        return;
+                    }
+                    this.analyzing = true;
+                    this.analysisResult = null;
+                    this.analysisError = '';
+                    this.analysisHeaderCells = [];
+                    this.analysisHeaderHtml = '';
+                    this.analysisRows = [];
+                    try {
+                        const res = await fetch('/api/transcripts/analyze', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ transcripts: transcripts, api_key: this.deepseekApiKey })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            this.analysisResult = data.result;
+                            this.analysisLabels = transcripts.map(t => t.label);
+                            this.buildAnalysisTable(data.result);
+                            this.showToast('文案拆分分析完成');
+                        } else {
+                            this.analysisError = data.error || '分析失败';
+                        }
+                    } catch (e) {
+                        this.analysisError = '网络错误，请检查网络连接后重试';
+                    } finally {
+                        this.analyzing = false;
+                    }
+                },
+
+                buildAnalysisTable(result) {
+                    const labels = Object.keys(result);
+                    if (labels.length === 0) return;
+
+                    // 构建表头 HTML（用 x-html 避免浏览器剥离 thead 中的 template）
+                    const thClass = 'px-3 py-2.5 text-left font-semibold text-douyin-gray-700 border-r border-douyin-gray-100 whitespace-nowrap';
+                    let headerHtml = `<th class="${thClass}">文案编号</th>`;
+                    headerHtml += `<th class="${thClass}">内容模块</th>`;
+                    labels.forEach(label => {
+                        headerHtml += `<th class="${thClass}">${label}内容</th>`;
+                        headerHtml += `<th class="${thClass}">结构分析</th>`;
+                    });
+                    headerHtml += `<th class="px-3 py-2.5 text-left font-semibold text-douyin-gray-700 whitespace-nowrap">备注</th>`;
+                    this.analysisHeaderHtml = headerHtml;
+
+                    // 找出最大核心观点数
+                    let maxPoints = 0;
+                    labels.forEach(label => {
+                        const points = result[label]?.['核心观点']?.length || 0;
+                        if (points > maxPoints) maxPoints = points;
+                    });
+
+                    const rows = [];
+
+                    // 构建行辅助函数
+                    const makeRow = (module, getData) => {
+                        const cells = [];
+                        let cellIdx = 0;
+                        // 文案编号 (在模板中动态计算，这里先占位)
+                        cells.push({ value: '', key: 'num', mono: true });
+                        // 内容模块
+                        cells.push({ value: module, key: 'mod', bold: true });
+                        // 每个 label 的 内容 + 结构分析
+                        labels.forEach((label, li) => {
+                            const d = getData(result[label]);
+                            cells.push({ value: d.content, key: `c${li}_${cellIdx}` });
+                            cells.push({ value: d.analysis, key: `a${li}_${cellIdx}` });
+                        });
+                        // 备注
+                        cells.push({ value: '', key: 'note' });
+                        return { cells };
+                    };
+
+                    // 开头行
+                    rows.push(makeRow('开头', (data) => ({
+                        content: data?.['开头']?.['原文'] || '',
+                        analysis: data?.['开头']?.['结构分析'] || ''
+                    })));
+
+                    // 核心观点行
+                    for (let i = 0; i < maxPoints; i++) {
+                        const idx = i;
+                        rows.push(makeRow('核心观点', (data) => {
+                            const point = data?.['核心观点']?.[idx];
+                            return {
+                                content: point?.['原文'] || '',
+                                analysis: point?.['结构分析'] || ''
+                            };
+                        }));
+                    }
+
+                    // 结尾行
+                    rows.push(makeRow('结尾', (data) => ({
+                        content: data?.['结尾']?.['原文'] || '',
+                        analysis: data?.['结尾']?.['结构分析'] || ''
+                    })));
+
+                    // 填充文案编号
+                    rows.forEach((row, ri) => {
+                        row.cells[0].value = String(ri + 1);
+                    });
+
+                    this.analysisRows = rows;
                 }
             }
         }

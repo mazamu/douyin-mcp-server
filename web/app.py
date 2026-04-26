@@ -25,6 +25,10 @@ import requests
 
 # 导入抖音处理模块
 from douyin_downloader import get_video_info, extract_text, HEADERS
+
+# 导入文案拆分分析模块
+sys.path.insert(0, str(Path(__file__).parent.parent / "douyin-video"))
+from splitAndAnalyse import split_copywriting_batch
 from urllib.parse import urlparse
 
 app = FastAPI(title="抖音文案提取器", version="1.0.0")
@@ -56,6 +60,19 @@ class ExtractResponse(BaseModel):
     error: str = ""
 
 
+class AnalyzeRequest(BaseModel):
+    """文案拆分分析请求"""
+    transcripts: list  # [{"label": "文案A", "text": "..."}, ...]
+    api_key: str = ""  # DeepSeek API Key
+
+
+class AnalyzeResponse(BaseModel):
+    """文案拆分分析响应"""
+    success: bool
+    result: dict = {}
+    error: str = ""
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """主页面"""
@@ -66,9 +83,11 @@ async def index(request: Request):
 async def health_check():
     """健康检查"""
     api_key = os.getenv("API_KEY", "")
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY", "")
     return {
         "status": "ok",
-        "api_key_configured": bool(api_key)
+        "api_key_configured": bool(api_key),
+        "deepseek_key_configured": bool(deepseek_key)
     }
 
 
@@ -109,6 +128,27 @@ async def extract_transcript(req: VideoRequest):
         )
     except Exception as e:
         return ExtractResponse(success=False, error=str(e))
+
+
+@app.post("/api/transcripts/analyze", response_model=AnalyzeResponse)
+async def analyze_transcripts(req: AnalyzeRequest):
+    """拆分分析文案结构（需要 DEEPSEEK_API_KEY）"""
+    if not req.transcripts:
+        return AnalyzeResponse(success=False, error="请提供至少一个文案")
+
+    api_key = req.api_key or os.getenv("DEEPSEEK_API_KEY", "")
+    if not api_key:
+        return AnalyzeResponse(
+            success=False,
+            error="请先配置 DeepSeek API Key"
+        )
+
+    try:
+        copies = {t["label"]: t["text"] for t in req.transcripts}
+        result = split_copywriting_batch(copies, api_key=api_key)
+        return AnalyzeResponse(success=True, result=result)
+    except Exception as e:
+        return AnalyzeResponse(success=False, error=str(e))
 
 
 def _get_referer_for_url(url: str) -> str:
