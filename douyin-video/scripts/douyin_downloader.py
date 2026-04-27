@@ -58,7 +58,7 @@ import ffmpeg
 
 # 请求头，模拟移动端访问
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/121.0.2277.107 Version/17.0 Mobile/15E148 Safari/604.1'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
 }
 
 # 硅基流动 API 配置
@@ -69,9 +69,8 @@ DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
 class DouyinProcessor:
     """抖音视频处理器"""
 
-    # 第三方解析 API
-    PARSE_API_URL = "https://proxy.layzz.cn/lyz/getAnalyse"
-    PARSE_API_TOKEN = "uuic-qackd-fga-test"
+    # 本地解析 API
+    PARSE_API_URL = "http://127.0.0.1:5556/xhs/detail"
 
     def __init__(self, api_key: str = "", api_base_url: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key
@@ -93,36 +92,41 @@ class DouyinProcessor:
 
         share_url = urls[0]
 
-        # 调用第三方解析 API 获取无水印视频链接
-        api_url = f"{self.PARSE_API_URL}?token={self.PARSE_API_TOKEN}&link={share_url}"
-        response = requests.get(api_url, headers=HEADERS)
+        # 调用本地解析 API 获取无水印视频链接
+        response = requests.post(
+            self.PARSE_API_URL,
+            json={"url": share_url, "download": False, "index": [], "proxy": ""},
+            headers=HEADERS,
+            timeout=30
+        )
         response.raise_for_status()
 
         result = response.json()
-        if result.get("code") != "0001":
+        data = result.get("data", {})
+
+        if not data:
             raise ValueError(f"解析失败: {result.get('message', '未知错误')}")
 
-        data = result["data"]
-        video_url = data["playAddr"]
-        desc = data.get("desc", "").strip() or "douyin_video"
+        # 从新 API 响应中提取数据
+        download_urls = data.get("下载地址", [])
+        if not download_urls or not download_urls[0]:
+            raise ValueError("未获取到无水印下载地址")
 
-        # 从视频 URL 中提取 video_id
-        video_id = ""
-        if share_url:
-            try:
-                share_response = requests.get(share_url, headers=HEADERS, allow_redirects=True)
-                video_id = share_response.url.split("?")[0].strip("/").split("/")[-1]
-            except Exception:
-                pass
+        video_url = download_urls[0]
+        # 替换为无水印下载地址前缀
+        video_url = re.sub(r'https?://[^/]+\.xhscdn\.com', 'https://sns-video-hw.xhscdn.com', video_url)
+        title = data.get("作品标题", "").strip() or "video"
+        video_id = data.get("作品ID", "")
+
         if not video_id:
             video_id = share_url.rstrip("/").split("/")[-1]
 
         # 替换文件名中的非法字符
-        desc = re.sub(r'[\\/:*?"<>|]', '_', desc)
+        title = re.sub(r'[\\/:*?"<>|]', '_', title)
 
         return {
             "url": video_url,
-            "title": desc,
+            "title": title,
             "video_id": video_id
         }
 

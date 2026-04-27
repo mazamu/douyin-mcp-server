@@ -41,8 +41,10 @@ DEFAULT_MODEL = "paraformer-v2"
 
 
 class DouyinProcessor:
-    """抖音视频处理器"""
-    
+    """抖音/小红书视频处理器"""
+
+    XHS_API_URL = "http://127.0.0.1:5556/xhs/detail"
+
     def __init__(self, api_key: str, model: Optional[str] = None):
         self.api_key = api_key
         self.model = model or DEFAULT_MODEL
@@ -57,21 +59,27 @@ class DouyinProcessor:
             shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def parse_share_url(self, share_text: str) -> dict:
-        """从分享文本中提取无水印视频链接"""
+        """从分享文本中提取无水印视频链接（支持抖音和小红书）"""
         # 提取分享链接
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', share_text)
         if not urls:
             raise ValueError("未找到有效的分享链接")
-        
+
         share_url = urls[0]
+
+        # 小红书链接走本地 API
+        if "xiaohongshu.com" in share_url:
+            return self._parse_xhs_url(share_url)
+
+        # 抖音：原有 HTML 页面抓取逻辑
         share_response = requests.get(share_url, headers=HEADERS)
         video_id = share_response.url.split("?")[0].strip("/").split("/")[-1]
         share_url = f'https://www.iesdouyin.com/share/video/{video_id}'
-        
+
         # 获取视频页面内容
         response = requests.get(share_url, headers=HEADERS)
         response.raise_for_status()
-        
+
         pattern = re.compile(
             pattern=r"window\._ROUTER_DATA\s*=\s*(.*?)</script>",
             flags=re.DOTALL,
@@ -85,7 +93,7 @@ class DouyinProcessor:
         json_data = json.loads(find_res.group(1).strip())
         VIDEO_ID_PAGE_KEY = "video_(id)/page"
         NOTE_ID_PAGE_KEY = "note_(id)/page"
-        
+
         if VIDEO_ID_PAGE_KEY in json_data["loaderData"]:
             original_video_info = json_data["loaderData"][VIDEO_ID_PAGE_KEY]["videoInfoRes"]
         elif NOTE_ID_PAGE_KEY in json_data["loaderData"]:
@@ -98,13 +106,48 @@ class DouyinProcessor:
         # 获取视频信息
         video_url = data["video"]["play_addr"]["url_list"][0].replace("playwm", "play")
         desc = data.get("desc", "").strip() or f"douyin_{video_id}"
-        
+
         # 替换文件名中的非法字符
         desc = re.sub(r'[\\/:*?"<>|]', '_', desc)
-        
+
         return {
             "url": video_url,
             "title": desc,
+            "video_id": video_id
+        }
+
+    def _parse_xhs_url(self, share_url: str) -> dict:
+        """通过本地 API 解析小红书链接"""
+        response = requests.post(
+            self.XHS_API_URL,
+            json={"url": share_url, "download": False, "index": [], "proxy": ""},
+            headers=HEADERS,
+            timeout=30
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        data = result.get("data", {})
+
+        if not data:
+            raise ValueError(f"解析失败: {result.get('message', '未知错误')}")
+
+        download_urls = data.get("下载地址", [])
+        if not download_urls or not download_urls[0]:
+            raise ValueError("未获取到无水印下载地址")
+
+        title = data.get("作品标题", "").strip() or "video"
+        video_id = data.get("作品ID", "")
+
+        if not video_id:
+            video_id = share_url.rstrip("/").split("/")[-1]
+
+        title = re.sub(r'[\\/:*?"<>|]', '_', title)
+        video_url = re.sub(r'https?://[^/]+\.xhscdn\.com', 'https://sns-video-hw.xhscdn.com', download_urls[0])
+
+        return {
+            "url": video_url,
+            "title": title,
             "video_id": video_id
         }
     
@@ -198,11 +241,11 @@ class DouyinProcessor:
 @mcp.tool()
 def get_douyin_download_link(share_link: str) -> str:
     """
-    获取抖音视频的无水印下载链接
-    
+    获取抖音/小红书视频的无水印下载链接
+
     参数:
-    - share_link: 抖音分享链接或包含链接的文本
-    
+    - share_link: 抖音或小红书分享链接
+
     返回:
     - 包含下载链接和视频信息的JSON字符串
     """
@@ -233,16 +276,16 @@ async def extract_douyin_text(
     ctx: Context = None
 ) -> str:
     """
-    从抖音分享链接提取视频中的文本内容
-    
+    从抖音/小红书分享链接提取视频中的文本内容
+
     参数:
-    - share_link: 抖音分享链接或包含链接的文本
+    - share_link: 抖音或小红书分享链接
     - model: 语音识别模型（可选，默认使用paraformer-v2）
-    
+
     返回:
     - 提取的文本内容
-    
-    注意: 需要设置环境变量 API_KEY
+
+    注意: 需要设置环境变量 API_KEY（仅抖音需要）
     """
     try:
         # 从环境变量获取API密钥
@@ -253,7 +296,7 @@ async def extract_douyin_text(
         processor = DouyinProcessor(api_key, model)
         
         # 解析视频链接
-        ctx.info("正在解析抖音分享链接...")
+        ctx.info("正在解析分享链接...")
         video_info = processor.parse_share_url(share_link)
         
         # 直接使用视频URL进行文本提取
@@ -271,11 +314,11 @@ async def extract_douyin_text(
 @mcp.tool()
 def parse_douyin_video_info(share_link: str) -> str:
     """
-    解析抖音分享链接，获取视频基本信息
-    
+    解析抖音/小红书分享链接，获取视频基本信息
+
     参数:
-    - share_link: 抖音分享链接或包含链接的文本
-    
+    - share_link: 抖音或小红书分享链接
+
     返回:
     - 视频信息（JSON格式字符串）
     """
@@ -300,11 +343,11 @@ def parse_douyin_video_info(share_link: str) -> str:
 @mcp.resource("douyin://video/{video_id}")
 def get_video_info(video_id: str) -> str:
     """
-    获取指定视频ID的详细信息
-    
+    获取指定视频ID的详细信息（支持抖音和小红书）
+
     参数:
-    - video_id: 抖音视频ID
-    
+    - video_id: 视频ID
+
     返回:
     - 视频详细信息
     """
@@ -319,27 +362,31 @@ def get_video_info(video_id: str) -> str:
 
 @mcp.prompt()
 def douyin_text_extraction_guide() -> str:
-    """抖音视频文本提取使用指南"""
+    """抖音/小红书视频文本提取使用指南"""
     return """
-# 抖音视频文本提取使用指南
+# 抖音/小红书视频文本提取使用指南
 
 ## 功能说明
-这个MCP服务器可以从抖音分享链接中提取视频的文本内容，以及获取无水印下载链接。
+这个MCP服务器可以从抖音或小红书分享链接中提取视频的文本内容，以及获取无水印下载链接。
 
 ## 环境变量配置
 请确保设置了以下环境变量：
-- `API_KEY`: 阿里云百炼API密钥
+- `API_KEY`: 阿里云百炼API密钥（仅抖音文本提取需要）
 
 ## 使用步骤
-1. 复制抖音视频的分享链接
+1. 复制抖音或小红书视频的分享链接
 2. 在Claude Desktop配置中设置环境变量 API_KEY
 3. 使用相应的工具进行操作
 
 ## 工具说明
-- `extract_douyin_text`: 完整的文本提取流程（需要API密钥）
-- `get_douyin_download_link`: 获取无水印视频下载链接（无需API密钥）
-- `parse_douyin_video_info`: 仅解析视频基本信息
+- `extract_douyin_text`: 完整的文本提取流程（仅抖音需要API密钥）
+- `get_douyin_download_link`: 获取无水印视频下载链接（无需API密钥，支持抖音和小红书）
+- `parse_douyin_video_info`: 仅解析视频基本信息（支持抖音和小红书）
 - `douyin://video/{video_id}`: 获取指定视频的详细信息
+
+## 平台支持
+- **抖音**: 通过网页抓取获取视频信息，文本提取需阿里云百炼API
+- **小红书**: 通过本地解析服务(127.0.0.1:5556)获取视频信息，无需API密钥
 
 ## Claude Desktop 配置示例
 ```json
@@ -357,9 +404,9 @@ def douyin_text_extraction_guide() -> str:
 ```
 
 ## 注意事项
-- 需要提供有效的阿里云百炼API密钥（通过环境变量）
+- 需要提供有效的阿里云百炼API密钥（通过环境变量，仅抖音需要）
 - 使用阿里云百炼的paraformer-v2模型进行语音识别
-- 支持大部分抖音视频格式
+- 小红书解析依赖本地服务 127.0.0.1:5556
 - 获取下载链接无需API密钥
 """
 
