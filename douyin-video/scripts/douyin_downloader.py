@@ -25,6 +25,7 @@
 import os
 import re
 import sys
+import json
 import argparse
 import tempfile
 import shutil
@@ -56,9 +57,9 @@ check_dependencies()
 import requests
 import ffmpeg
 
-# 请求头，模拟移动端访问
+# 请求头，模拟手机端访问（抖音需要手机端 UA 才能拿到 window._ROUTER_DATA）
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) EdgiOS/121.0.2277.107 Version/17.0 Mobile/15E148 Safari/604.1'
 }
 
 # 硅基流动 API 配置
@@ -69,7 +70,7 @@ DEFAULT_MODEL = "FunAudioLLM/SenseVoiceSmall"
 class DouyinProcessor:
     """抖音视频处理器"""
 
-    # 本地解析 API
+    # 本地解析 API（小红书）
     PARSE_API_URL = "http://127.0.0.1:5556/xhs/detail"
 
     def __init__(self, api_key: str = "", api_base_url: Optional[str] = None, model: Optional[str] = None):
@@ -84,7 +85,7 @@ class DouyinProcessor:
             shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def parse_share_url(self, share_text: str) -> dict:
-        """从分享文本中提取无水印视频链接"""
+        """从分享文本中提取无水印视频链接（支持抖音和小红书）"""
         # 提取分享链接
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', share_text)
         if not urls:
@@ -92,7 +93,15 @@ class DouyinProcessor:
 
         share_url = urls[0]
 
-        # 调用本地解析 API 获取无水印视频链接
+        # 小红书链接走本地 API
+        if "xiaohongshu.com" in share_url:
+            return self._parse_xhs_url(share_url)
+
+        # 抖音：HTML 页面抓取逻辑
+        return self._parse_douyin_url(share_url)
+
+    def _parse_xhs_url(self, share_url: str) -> dict:
+        """通过本地 API 解析小红书链接"""
         response = requests.post(
             self.PARSE_API_URL,
             json={"url": share_url, "download": False, "index": [], "proxy": ""},
@@ -107,7 +116,6 @@ class DouyinProcessor:
         if not data:
             raise ValueError(f"解析失败: {result.get('message', '未知错误')}")
 
-        # 从新 API 响应中提取数据
         download_urls = data.get("下载地址", [])
         if not download_urls or not download_urls[0]:
             raise ValueError("未获取到无水印下载地址")
@@ -121,12 +129,57 @@ class DouyinProcessor:
         if not video_id:
             video_id = share_url.rstrip("/").split("/")[-1]
 
-        # 替换文件名中的非法字符
         title = re.sub(r'[\\/:*?"<>|]', '_', title)
 
         return {
             "url": video_url,
             "title": title,
+            "video_id": video_id
+        }
+
+    def _parse_douyin_url(self, share_url: str) -> dict:
+        """通过 HTML 页面抓取解析抖音链接"""
+        share_response = requests.get(share_url, headers=HEADERS)
+        video_id = share_response.url.split("?")[0].strip("/").split("/")[-1]
+        share_url = f'https://www.iesdouyin.com/share/video/{video_id}'
+
+        # 获取视频页面内容
+        response = requests.get(share_url, headers=HEADERS)
+        response.raise_for_status()
+
+        pattern = re.compile(
+            pattern=r"window\._ROUTER_DATA\s*=\s*(.*?)</script>",
+            flags=re.DOTALL,
+        )
+        find_res = pattern.search(response.text)
+
+        if not find_res or not find_res.group(1):
+            raise ValueError("从HTML中解析视频信息失败")
+
+        # 解析JSON数据
+        json_data = json.loads(find_res.group(1).strip())
+        VIDEO_ID_PAGE_KEY = "video_(id)/page"
+        NOTE_ID_PAGE_KEY = "note_(id)/page"
+
+        if VIDEO_ID_PAGE_KEY in json_data["loaderData"]:
+            original_video_info = json_data["loaderData"][VIDEO_ID_PAGE_KEY]["videoInfoRes"]
+        elif NOTE_ID_PAGE_KEY in json_data["loaderData"]:
+            original_video_info = json_data["loaderData"][NOTE_ID_PAGE_KEY]["videoInfoRes"]
+        else:
+            raise Exception("无法从JSON中解析视频或图集信息")
+
+        data = original_video_info["item_list"][0]
+
+        # 获取视频信息（替换 playwm 为 play 去除水印）
+        video_url = data["video"]["play_addr"]["url_list"][0].replace("playwm", "play")
+        desc = data.get("desc", "").strip() or f"douyin_{video_id}"
+
+        # 替换文件名中的非法字符
+        desc = re.sub(r'[\\/:*?"<>|]', '_', desc)
+
+        return {
+            "url": video_url,
+            "title": desc,
             "video_id": video_id
         }
 
