@@ -24,7 +24,7 @@ import uvicorn
 import requests
 
 # 导入抖音处理模块
-from douyin_downloader import get_video_info, extract_text, HEADERS
+from douyin_downloader import get_video_info, extract_text
 
 # 导入文案拆分分析模块
 sys.path.insert(0, str(Path(__file__).parent.parent / "douyin-video"))
@@ -155,7 +155,7 @@ def _get_referer_for_url(url: str) -> str:
     """根据视频 URL 自动判断来源平台，返回正确的 Referer"""
     domain = urlparse(url).hostname or ""
     if any(d in domain for d in ["douyin.com", "365yg.com", "amemv.com", "douyincdn.com",
-                                  "iesdouyin.com", "douyinvod.com"]):
+                                  "iesdouyin.com", "douyinvod.com", "snssdk.com"]):
         return "https://www.douyin.com/"
     if any(d in domain for d in ["xiaohongshu.com", "xhscdn.com"]):
         return "https://www.xiaohongshu.com/"
@@ -176,7 +176,7 @@ async def download_video(url: str, filename: str = "video.mp4"):
         referer = _get_referer_for_url(url)
 
         download_headers = {
-            'User-Agent': HEADERS['User-Agent'],
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
             'Referer': referer,
             'Origin': referer.rstrip("/"),
             'Accept': '*/*',
