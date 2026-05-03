@@ -4,11 +4,15 @@
 
 启动方式:
     cd douyin-mcp-server
-    export API_KEY="sk-xxx"
     python web/app.py
     # 访问 http://localhost:8080
+
+API Key 配置文件（位于项目根目录，优先级高于环境变量）:
+    api_key.txt          - 硅基流动 API Key
+    deepseek_api_key.txt - DeepSeek API Key
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -30,6 +34,31 @@ from douyin_downloader import get_video_info, extract_text
 sys.path.insert(0, str(Path(__file__).parent.parent / "douyin-video"))
 from splitAndAnalyse import split_copywriting_batch
 from urllib.parse import urlparse
+
+_PROJECT_ROOT = Path(__file__).parent.parent
+
+
+def _read_key_file(filename: str) -> str:
+    """从项目根目录的文件读取 API Key（取第一行有效内容）"""
+    key_file = _PROJECT_ROOT / filename
+    if key_file.exists():
+        try:
+            for line in key_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    return line
+        except Exception:
+            pass
+    return ""
+
+
+def _get_api_key() -> str:
+    return _read_key_file("api_key.txt") or os.getenv("API_KEY", "")
+
+
+def _get_deepseek_api_key() -> str:
+    return _read_key_file("deepseek_api_key.txt") or os.getenv("DEEPSEEK_API_KEY", "")
+
 
 app = FastAPI(title="抖音文案提取器", version="1.0.0")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
@@ -82,8 +111,8 @@ async def index(request: Request):
 @app.get("/api/health")
 async def health_check():
     """健康检查"""
-    api_key = os.getenv("API_KEY", "")
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY", "")
+    api_key = _get_api_key()
+    deepseek_key = _get_deepseek_api_key()
     return {
         "status": "ok",
         "api_key_configured": bool(api_key),
@@ -110,7 +139,7 @@ async def get_info(req: VideoRequest):
 async def extract_transcript(req: VideoRequest):
     """提取视频文案（需要 API_KEY）"""
     # 优先使用请求中的 API Key，其次使用环境变量
-    api_key = req.api_key or os.getenv("API_KEY", "")
+    api_key = req.api_key or _get_api_key()
     if not api_key:
         return ExtractResponse(
             success=False,
@@ -136,7 +165,7 @@ async def analyze_transcripts(req: AnalyzeRequest):
     if not req.transcripts:
         return AnalyzeResponse(success=False, error="请提供至少一个文案")
 
-    api_key = req.api_key or os.getenv("DEEPSEEK_API_KEY", "")
+    api_key = req.api_key or _get_deepseek_api_key()
     if not api_key:
         return AnalyzeResponse(
             success=False,
@@ -146,6 +175,10 @@ async def analyze_transcripts(req: AnalyzeRequest):
     try:
         copies = {t["label"]: t["text"] for t in req.transcripts}
         result = split_copywriting_batch(copies, api_key=api_key)
+        print("=" * 60)
+        print("文案拆分分析结果:")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print("=" * 60)
         return AnalyzeResponse(success=True, result=result)
     except Exception as e:
         return AnalyzeResponse(success=False, error=str(e))
@@ -216,7 +249,7 @@ def main():
     """启动服务"""
     port = int(os.getenv("PORT", "8080"))
     print(f"🚀 启动文案提取器 WebUI: http://localhost:{port}")
-    print(f"📝 API_KEY 配置状态: {'已配置' if os.getenv('API_KEY') else '未配置'}")
+    print(f"📝 API_KEY 配置状态: {'已配置' if _get_api_key() else '未配置'}")
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 

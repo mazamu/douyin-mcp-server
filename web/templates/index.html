@@ -388,6 +388,11 @@
                         </div>
                         <span class="font-semibold text-sm text-douyin-gray-900">文案拆分分析结果</span>
                     </div>
+                    <button @click="copyAnalysisTable()"
+                            class="flex items-center gap-1.5 h-8 px-3 bg-douyin-gray-100 hover:bg-douyin-gray-200 text-douyin-gray-700 text-xs font-medium rounded-lg transition-smooth">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        复制表格
+                    </button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-xs">
@@ -398,9 +403,15 @@
                             <template x-for="(row, ri) in analysisRows" :key="ri">
                                 <tr :class="ri % 2 === 0 ? 'bg-white' : 'bg-douyin-gray-50/50'">
                                     <template x-for="cell in row.cells" :key="cell.key">
-                                        <td class="px-3 py-2 border-t border-douyin-gray-100 leading-relaxed max-w-60"
-                                            :class="cell.mono ? 'text-douyin-gray-500 font-mono' : cell.bold ? 'font-medium text-douyin-gray-800' : 'text-douyin-gray-700'"
-                                            x-text="cell.value"></td>
+                                        <td class="px-3 py-2 border-t border-douyin-gray-100 max-w-60"
+                                            :class="cell.mono ? 'font-mono' : cell.bold ? 'font-medium' : ''">
+                                            <div contenteditable="true"
+                                                 class="editable-cell outline-none min-w-[60px] text-xs leading-relaxed focus:bg-douyin-red/5 focus:ring-2 focus:ring-douyin-red/20 rounded px-1 py-0.5 -mx-1 -my-0.5 transition-smooth"
+                                                 :class="cell.mono ? 'text-douyin-gray-500' : cell.bold ? 'text-douyin-gray-800' : 'text-douyin-gray-700'"
+                                                 x-text="cell.value"
+                                                 @input="cell.value = $event.target.innerText"
+                                                 @blur="cell.value = $event.target.innerText.trim()"></div>
+                                        </td>
                                     </template>
                                 </tr>
                             </template>
@@ -578,9 +589,38 @@
                     finally { card.loading = false; }
                 },
 
+                copyToClipboard(text, successMsg) {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text).then(() => {
+                            this.showToast(successMsg);
+                        }).catch(() => {
+                            this._fallbackCopy(text, successMsg);
+                        });
+                    } else {
+                        this._fallbackCopy(text, successMsg);
+                    }
+                },
+
+                _fallbackCopy(text, successMsg) {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    ta.style.position = 'fixed';
+                    ta.style.left = '-9999px';
+                    ta.style.top = '-9999px';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    try {
+                        document.execCommand('copy');
+                        this.showToast(successMsg);
+                    } catch (e) {
+                        this.showToast('复制失败，请手动选择复制');
+                    }
+                    document.body.removeChild(ta);
+                },
+
                 async copyTranscript(index) {
-                    try { await navigator.clipboard.writeText(this.cards[index].transcript); this.showToast('文案已复制到剪贴板'); }
-                    catch (e) { this.showToast('复制失败'); }
+                    this.copyToClipboard(this.cards[index].transcript, '文案已复制到剪贴板');
                 },
 
                 downloadTranscript(index) {
@@ -712,7 +752,37 @@
                     });
 
                     this.analysisRows = rows;
-                }
+                },
+
+                copyAnalysisTable() {
+                    if (!this.analysisRows || this.analysisRows.length === 0) {
+                        this.showToast('没有可复制的表格数据');
+                        return;
+                    }
+                    // 收集所有唯一的列标签
+                    const headerCells = [];
+                    const seen = new Set();
+                    this.analysisRows[0].cells.forEach((cell) => {
+                        if (!seen.has(cell.key)) {
+                            seen.add(cell.key);
+                            headerCells.push(cell);
+                        }
+                    });
+                    // 用实际表头文本
+                    const ths = document.querySelectorAll('.overflow-x-auto thead th');
+                    const headerTexts = [];
+                    ths.forEach(th => headerTexts.push(th.textContent.trim()));
+
+                    // 构建 TSV 字符串（粘贴到 Excel 友好）
+                    const lines = [];
+                    lines.push(headerTexts.join('\t'));
+                    this.analysisRows.forEach(row => {
+                        const vals = row.cells.map(c => c.value || '');
+                        lines.push(vals.join('\t'));
+                    });
+                    const tsv = lines.join('\n');
+                    this.copyToClipboard(tsv, '表格已复制（可直接粘贴到 Excel）');
+                },
             }
         }
     </script>
